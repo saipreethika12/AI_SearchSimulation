@@ -1,26 +1,6 @@
+import gymnasium as gym
 import heapq
 import time
-import gymnasium as gym
-import pygame
-import numpy as np
-
-
-def visualize_path(env, path):
-    pygame.init()
-    size = env.render().shape[:2]
-    window = pygame.display.set_mode((size[1], size[0]))
-    pygame.display.set_caption('Frozen Lake Path Visualization')
-
-    clock = pygame.time.Clock()
-    for state in path:
-        frame = env.render()
-        surface = pygame.surfarray.make_surface(
-            np.transpose(frame, axes=(1, 0, 2)))
-        window.blit(surface, (0, 0))
-        pygame.display.flip()
-        clock.tick(1)  # Adjust the speed as needed
-
-    pygame.quit()
 
 
 def branch_and_bound(env, max_time=600):
@@ -38,7 +18,7 @@ def branch_and_bound(env, max_time=600):
 
         path = path + [current_state]
 
-        if env.unwrapped.desc.reshape(-1)[current_state] == b'G':
+        if env.unwrapped.desc.reshape(-1)[current_state] == b'G':  # Goal state
             if cost < best_cost:
                 best_cost = cost
                 best_path = path
@@ -57,22 +37,37 @@ def branch_and_bound(env, max_time=600):
     return best_path, best_cost
 
 
+def visualize_frozen_lake(env, path):
+    """ Renders the agent moving through the Frozen Lake """
+    env.reset()
+
+    if not path:
+        print("No valid path found.")
+        return
+
+    for state in path:
+        env.env.s = state  # Set the player's position manually
+        env.render()
+        time.sleep(0.5)  # Add delay for better visibility
+
+    time.sleep(2)  # Pause at goal for clarity
+    env.close()  # Close the environment after visualization
+
+
 def run_experiment(runs=5):
-    env = gym.make('FrozenLake-v1', desc=None, map_name="4x4",
-                   is_slippery=True, render_mode='rgb_array')
-    times = []
-
     for _ in range(runs):
-        start_time = time.time()
+        env = gym.make('FrozenLake-v1', desc=None, map_name="4x4",
+                       is_slippery=True, render_mode="human")
+
         path, cost = branch_and_bound(env)
-        times.append(time.time() - start_time)
-        print("Run completed in:", times[-1], "seconds with cost:", cost)
 
-        if path:
-            visualize_path(env, path)
+        if path is None:
+            print("No path found. Skipping visualization.")
+        else:
+            print("Path:", path, "Cost:", cost)
+            visualize_frozen_lake(env, path)
 
-    env.close()
-    return times
+        env.close()  # Ensure the environment is closed properly
 
 
 if __name__ == "__main__":
