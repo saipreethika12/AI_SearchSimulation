@@ -5,10 +5,10 @@ import numpy as np
 
 def heuristic(node, goal):
     """
-    Heuristic function: Manhattan distance from current position to goal.
+    Heuristic function: Euclidean distance from current position to goal.
     """
     size = 4  # FrozenLake 4x4 grid
-    return abs((goal % size) - (node % size)) + abs((goal // size) - (node // size))
+    return ((goal % size - node % size) ** 2 + (goal // size - node // size) ** 2) ** 0.5
 
 
 def is_goal(node, goal):
