@@ -8,7 +8,7 @@ def heuristic(node, goal):
     Heuristic function: Euclidean distance from current position to goal.
     """
     size = 4  # FrozenLake 4x4 grid
-    return ((goal % size - node % size) ** 2 + (goal // size - node // size) ** 2) ** 0.5
+    return ((goal % size - node % size) ** 2 - (goal // size - node // size) ** 2)
 
 
 def is_goal(node, goal):
