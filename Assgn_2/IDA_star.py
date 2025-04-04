@@ -1,14 +1,12 @@
 import time
 import gymnasium as gym
 import numpy as np
+import matplotlib.pyplot as plt
 
 
 def heuristic(node, goal):
-    """
-    Heuristic function: Manhattan Distance from current position to goal.
-    """
-    size = 4  # FrozenLake 4x4 grid
-    return ((goal % size - node % size)  + (goal // size - node // size))
+    size = 4
+    return abs(goal % size - node % size) + abs(goal // size - node // size)
 
 
 def is_goal(node, goal):
@@ -16,22 +14,16 @@ def is_goal(node, goal):
 
 
 def successors(env, node):
-    """
-    Expands the node by considering all possible actions and returns valid successors.
-    """
     valid_moves = []
     for action in range(env.action_space.n):
         transitions = env.unwrapped.P[node][action]
         for prob, new_state, reward, done in transitions:
-            if prob > 0:  # Ensure valid transitions
+            if prob > 0:
                 valid_moves.append((new_state, action))
     return valid_moves
 
 
 def cost(node, succ):
-    """
-    Constant step cost for each move.
-    """
     return 1
 
 
@@ -48,16 +40,15 @@ def search(path, g, bound, env, visited, goal, action_path):
         if succ not in visited:
             path.append(succ)
             visited.add(succ)
-            action_path.append(action)  # Store action taken
-            t = search(path, g + cost(node, succ), bound,
-                       env, visited, goal, action_path)
+            action_path.append(action)
+            t = search(path, g + cost(node, succ), bound, env, visited, goal, action_path)
             if t == "FOUND":
                 return "FOUND"
             if t < min_bound:
                 min_bound = t
             path.pop()
             visited.remove(succ)
-            action_path.pop()  # Remove failed action
+            action_path.pop()
     return min_bound
 
 
@@ -65,20 +56,18 @@ def ida_star(env, start, goal, time_limit=600):
     bound = heuristic(start, goal)
     path = [start]
     visited = {start}
-    action_path = []  # Store the sequence of actions
+    action_path = []
     start_time = time.time()
 
     while True:
         if time.time() - start_time > time_limit:
-            print("Timeout reached!")
-            return "NOT_FOUND (TIMEOUT)", []
+            return "NOT_FOUND (TIMEOUT)", [], (time.time() - start_time) 
 
         t = search(path, 0, bound, env, visited, goal, action_path)
-
         if t == "FOUND":
-            return path, action_path  # Return both states and actions
+            return path, action_path, (time.time() - start_time)
         if t == float('inf'):
-            return "NOT_FOUND", []
+            return "NOT_FOUND", [], (time.time() - start_time)
         bound = t
 
 
@@ -86,20 +75,23 @@ def ida_star(env, start, goal, time_limit=600):
 env = gym.make("FrozenLake-v1", desc=None, map_name="4x4",
                is_slippery=False, render_mode="human")
 
-goal_state = 15  # Bottom-right corner of a 4x4 grid
+goal_state = 15
+times = []
 
-# Run IDA* on Frozen Lake for 5 runs
 for i in range(5):
     obs, _ = env.reset()
-    path, actions = ida_star(env, obs, goal_state)
+    print(f"\nRun {i+1}:")
+    path, actions, duration = ida_star(env, obs, goal_state)
 
-    print(f"Run {i+1}: Path -> {path}")
+    print(f"Time taken: {duration:.2f} ms")
+    times.append(duration)
 
-    if path == "NOT_FOUND":
+    if path == "NOT_FOUND" or path == "NOT_FOUND (TIMEOUT)":
         print("No solution found.")
         continue
 
-    # Replay solution step by step
+    print(f"Path: {path}")
+
     obs, _ = env.reset()
     env.render()
     time.sleep(1)
@@ -107,9 +99,25 @@ for i in range(5):
     for action in actions:
         obs, _, done, _, _ = env.step(action)
         env.render()
-        time.sleep(0.5)  # Pause to see movement
-
+        time.sleep(0.5)
         if done:
-            break  # Stop if goal is reached
+            break
 
 env.close()
+
+# Show average time
+if times:
+    avg = sum(times) / len(times)
+    print(f"\nAverage time to find path: {avg:.2f} ms")
+
+    # Plotting
+    plt.figure(figsize=(8, 4))
+    plt.plot(range(1, len(times)+1), times, marker='o', linestyle='--', color='blue')
+    plt.axhline(y=avg, color='red', linestyle='-', label=f"Average: {avg:.2f} ms")
+    plt.title("IDA* Time to Reach Goal (FrozenLake)")
+    plt.xlabel("Run Number")
+    plt.ylabel("Time (ms)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()

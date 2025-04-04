@@ -1,74 +1,122 @@
 import gymnasium as gym
-import heapq
 import time
+import matplotlib.pyplot as plt
 
 
-def branch_and_bound(env, max_time=600):
-    start_time = time.time()
-    state, _ = env.reset()
-    frontier = [(0, state, [])]  # (cost, current_state, path)
-    best_cost = float("inf")
-    best_path = None
+def get_transitions(env):
+    transitions = {}
+    for state in range(env.observation_space.n):
+        transitions[state] = {}
+        for action in range(env.action_space.n):
+            transitions[state][action] = env.unwrapped.P[state][action]
+    return transitions
 
-    while frontier and (time.time() - start_time) < max_time:
-        cost, current_state, path = heapq.heappop(frontier)
 
-        if current_state in path:
-            continue  # Avoid loops
+def manhattan_heuristic(state, goal_state, width):
+    x1, y1 = divmod(state, width)
+    x2, y2 = divmod(goal_state, width)
+    return abs(x1 - x2) + abs(y1 - y2)
 
-        path = path + [current_state]
 
-        if env.unwrapped.desc.reshape(-1)[current_state] == b'G':  # Goal state
+def find_goal_state(desc):
+    for idx, val in enumerate(desc.reshape(-1)):
+        if val == b'G':
+            return idx
+    return None
+
+
+def depth_first_bnb(env, max_time=600, start_time=None):
+    transitions = get_transitions(env)
+    start_state, _ = env.reset()
+    goal_state = find_goal_state(env.unwrapped.desc)
+    width = env.unwrapped.ncol
+
+    stack = [(start_state, [start_state], 0)]
+    best_cost = float('inf')
+    best_path = []
+
+    while stack and (time.time() - start_time) < max_time:
+        state, path, cost = stack.pop()
+
+        if cost >= best_cost:
+            continue
+
+        if state == goal_state:
             if cost < best_cost:
                 best_cost = cost
-                best_path = path
-                print("Goal reached with cost:", best_cost)
+                best_path = path[:]
             continue
 
         for action in range(env.action_space.n):
-            next_state, reward, done, truncated, _ = env.step(action)
-            new_cost = cost + 1  # Uniform cost for each step
-            if new_cost < best_cost:
-                heapq.heappush(frontier, (new_cost, next_state, path))
+            for prob, next_state, reward, done in transitions[state][action]:
+                if prob > 0 and next_state not in path:
+                    heuristic = manhattan_heuristic(next_state, goal_state, width)
+                    if cost + 1 + heuristic < best_cost:
+                        stack.append((next_state, path + [next_state], cost + 1))
 
-            if done:
-                env.reset()
-
-    return best_path, best_cost
+    return best_path, best_cost if best_path else None
 
 
 def visualize_frozen_lake(env, path):
-    """ Renders the agent moving through the Frozen Lake """
     env.reset()
-
     if not path:
         print("No valid path found.")
         return
 
     for state in path:
-        env.env.s = state  # Set the player's position manually
+        env.unwrapped.s = state
         env.render()
-        time.sleep(0.5)  # Add delay for better visibility
+        time.sleep(0.5)
 
-    time.sleep(2)  # Pause at goal for clarity
-    env.close()  # Close the environment after visualization
+    time.sleep(2)
+    env.close()
 
 
-def run_experiment(runs=5):
-    for _ in range(runs):
-        env = gym.make('FrozenLake-v1', desc=None, map_name="4x4",
-                       is_slippery=True, render_mode="human")
+def run_experiment(runs=5, timeout=600):
+    times = []
 
-        path, cost = branch_and_bound(env)
+    for i in range(runs):
+        print(f"\nRun {i + 1}:")
+        env = gym.make("FrozenLake-v1", map_name="4x4", is_slippery=True, render_mode="human")
 
-        if path is None:
-            print("No path found. Skipping visualization.")
-        else:
-            print("Path:", path, "Cost:", cost)
+        start_time = time.time()
+        path, cost = depth_first_bnb(env, max_time=timeout, start_time=start_time)
+        duration = time.time() - start_time
+
+        if path:
+            print(f"Path: {path}")
+            print(f"Cost: {cost}")
+            print(f"Time: {duration:.3f} seconds")
             visualize_frozen_lake(env, path)
+            times.append(duration)
+        else:
+            print(f"No path found within {timeout} seconds.")
 
-        env.close()  # Ensure the environment is closed properly
+        env.close()
+
+    return times
+
+
+def plot_results(times):
+    if not times:
+        print("No successful runs to plot.")
+        return
+
+    avg_time = sum(times) / len(times)
+    print(f"\nAverage time to reach goal: {avg_time:.3f} seconds")
+
+    plt.figure(figsize=(8, 4))
+    plt.plot(range(1, len(times) + 1), times, marker='o', linestyle='--', color='blue')
+    plt.axhline(y=avg_time, color='red', linestyle='-', label=f"Average: {avg_time:.3f}s")
+    plt.title("Time Taken to Reach Goal in Each Run (DFBnB with Manhattan Heuristic)")
+    plt.xlabel("Run Number")
+    plt.ylabel("Time (seconds)")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == "__main__":
-    run_experiment()
+    run_times = run_experiment(runs=5, timeout=600)
+    plot_results(run_times)
