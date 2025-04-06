@@ -19,12 +19,14 @@ def evaluate_tour(env, tours):
 def random_tour(num_nodes):
     return [0] + list(np.random.permutation(range(1, num_nodes)))
 
-def hill_climb(env, max_iter=100):
+def hill_climb(env, max_iter=1000):
     num_nodes = env.num_nodes
     batch_size = env.batch_size
 
     best_tours = [random_tour(num_nodes) for _ in range(batch_size)]
     best_scores = evaluate_tour(env, best_tours)
+    
+    evolution = [(best_tours[0].copy(), best_scores[0])]
 
     for _ in range(max_iter):
         new_tours = []
@@ -40,53 +42,72 @@ def hill_climb(env, max_iter=100):
             if new_scores[i] > best_scores[i]:
                 best_tours[i] = new_tours[i]
                 best_scores[i] = new_scores[i]
+                evolution.append((best_tours[0].copy(), best_scores[0]))
 
-    return best_tours, best_scores
+    return best_tours, best_scores, evolution
+    
+import matplotlib.animation as animation
 
-def visualize_tour(env, tour, graph_index=0):
-    vrp_graph = env.sampler.graphs[graph_index]
-    G = getattr(vrp_graph, 'graph', None)
 
-    if G is None:
-        raise TypeError("Could not extract networkx.Graph from VRPGraph")
+def animate_all_runs(all_frames, env, filename="all_runs_evolution.gif"):
+    vrp_graphs = [g.graph for g in env.sampler.graphs]
+    pos_list = [nx.get_node_attributes(G, 'coordinates') for G in vrp_graphs]
+    
+    fig, ax = plt.subplots()
 
-    tour = [int(node) for node in tour]
-    pos = nx.get_node_attributes(G, 'coordinates')
+    def update(frame_data):
+        tour, score, run_idx, frame_idx, pause, G, pos = frame_data
+        ax.clear()
+        # nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=500, ax=ax)
+        coords = [pos[node] for node in tour] + [pos[tour[0]]]
+        xs, ys = zip(*coords)
+        ax.plot(xs, ys, color='green', linewidth=1, marker='o')
+        if pause:
+            ax.set_title(f"DONE\nBest Score: {-score:.2f}", fontsize=12)
+        else:
+            ax.set_title(f"Step {frame_idx + 1} | Cost: {-score:.2f}")
 
-    if not pos:
-        raise ValueError("No 'coordinates' attribute found in node data.")
+    ani = animation.FuncAnimation(fig, update, frames=all_frames, interval=300)
+    ani.save(filename, writer='pillow')
+    plt.close(fig)
+    print(f"Saved combined animation as '{filename}'")
 
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=500)
 
-    coords = [pos[node] for node in tour]
-    coords.append(coords[0])  # Return to depot
-
-    xs, ys = zip(*coords)
-    plt.plot(xs, ys, color='red', linewidth=2, marker='o')
-    plt.title(f"TSP Tour for Graph {graph_index + 1}")
-    plt.show()
 
 def main():
     num_runs = 5
     times = []
     scores = []
-    nodes=[5,10,12,15,20]
+
+    all_frames = []
 
     for run in range(num_runs):
-        env = TSPEnv(num_nodes=nodes[run], batch_size=1, num_draw=1)
+        env = TSPEnv(num_nodes=25, batch_size=1, num_draw=1)
+        G = env.sampler.graphs[0].graph
+        pos = nx.get_node_attributes(G, 'coordinates')
+
         start = time.time()
-        best_tours, best_scores = hill_climb(env, max_iter=100)
+        best_tours, best_scores, tour_evolution = hill_climb(env, max_iter=1000)
         duration = time.time() - start
         times.append(duration)
         scores.append(best_scores[0])
 
         print(f"Run {run + 1}: Time = {duration:.4f}s, Best Score = {best_scores[0]:.2f}")
-        visualize_tour(env, best_tours[0], graph_index=0)
+
+        for idx, (tour, score) in enumerate(tour_evolution):
+            if run==0: all_frames.append((tour, score, run, idx, False, G, pos))
+
+        # Add 10 "pause" frames at end of this run with summary text
+        for _ in range(10):
+            if run==0: all_frames.append((best_tours[0], best_scores[0], run, idx, True, G, pos))
+        if run==0: animate_all_runs(all_frames, env)
+
+    # animate_all_runs(all_frames, env)
 
     avg_time = np.mean(times)
     print(f"\nAverage time over {num_runs} runs: {avg_time:.4f} seconds")
 
-    # Plotting time per run
+    # Optional: Plotting time per run
     plt.figure(figsize=(8, 5))
     plt.plot(range(1, num_runs + 1), times, marker='o', linestyle='-')
     plt.title("Time Taken to Reach Optimum in Each Run")
@@ -95,6 +116,7 @@ def main():
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
 
 if __name__ == "__main__":
     main()

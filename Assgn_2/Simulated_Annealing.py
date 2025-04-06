@@ -19,7 +19,7 @@ def evaluate_tour(env, tours):
 def random_tour(num_nodes):
     return [0] + list(np.random.permutation(range(1, num_nodes)))
 
-def simulated_annealing(env, max_iter=1000, initial_temp=100.0, cooling_rate=0.995):
+def simulated_annealing(env, max_iter=100, initial_temp=100.0, cooling_rate=0.995):
     num_nodes = env.num_nodes
     batch_size = env.batch_size
 
@@ -28,6 +28,8 @@ def simulated_annealing(env, max_iter=1000, initial_temp=100.0, cooling_rate=0.9
     current_tours = best_tours.copy()
     current_scores = best_scores.copy()
     temp = initial_temp
+
+    history = [(best_tours[0], best_scores[0])]  # For animation (only 1 tour, since batch_size = 1)
 
     for _ in range(max_iter):
         new_tours = []
@@ -47,55 +49,90 @@ def simulated_annealing(env, max_iter=1000, initial_temp=100.0, cooling_rate=0.9
                 if current_scores[i] > best_scores[i]:
                     best_tours[i] = current_tours[i]
                     best_scores[i] = current_scores[i]
-
+                    history.append((best_tours[0][:], best_scores[0]))
         temp *= cooling_rate
 
-    return best_tours, best_scores
+        # history.append((best_tours[0][:], best_scores[0]))  # Track best tour at each step
 
-def visualize_tour(env, tour, graph_index=0):
-    vrp_graph = env.sampler.graphs[graph_index]
-    G = getattr(vrp_graph, 'graph', None)
+    return best_tours, best_scores, history
 
-    if G is None:
-        raise TypeError("Could not extract networkx.Graph from VRPGraph")
+    
+import matplotlib.animation as animation
 
-    tour = [int(node) for node in tour]
-    pos = nx.get_node_attributes(G, 'coordinates')
+def create_combined_animation(all_frames, filename="simulated_annealing_all_runs.gif"):
+    fig, ax = plt.subplots(figsize=(6, 6))
 
-    if not pos:
-        raise ValueError("No 'coordinates' attribute found in node data.")
+    def update(frame_data):
+        G, pos, tour, score, title = frame_data
+        ax.clear()
+        coords = [pos[node] for node in tour] + [pos[tour[0]]]
+        xs, ys = zip(*coords)
 
-    nx.draw(G, pos, with_labels=True, node_color='lightblue', node_size=500)
+        ax.plot(xs, ys, color='green', linewidth=1, marker='o')
+        ax.set_xlim(0, 1)
+        ax.set_ylim(0, 1)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.set_aspect('equal')
 
-    coords = [pos[node] for node in tour]
-    coords.append(coords[0])  # Return to depot
+        ax.set_title(title)
 
-    xs, ys = zip(*coords)
-    plt.plot(xs, ys, color='green', linewidth=2, marker='o')
-    plt.title(f"Simulated Annealing Tour for Graph {graph_index + 1}")
-    plt.show()
+    ani = animation.FuncAnimation(
+        fig,
+        update,
+        frames=all_frames,
+        interval=500,
+        repeat=False
+    )
+
+    ani.save(filename, writer='pillow')
+    plt.close(fig)
+    print(f"Saved combined animation as '{filename}'")
+
 
 def main():
     num_runs = 5
     times = []
     scores = []
-    nodes=[5,10,12,15,20]
+
+    all_frames = []
 
     for run in range(num_runs):
-        env = TSPEnv(num_nodes=nodes[run], batch_size=1, num_draw=1)
+        print(f"\n--- Run {run + 1} ---")
+        env = TSPEnv(num_nodes=25, batch_size=1, num_draw=1)
+
         start = time.time()
-        best_tours, best_scores = simulated_annealing(env, max_iter=1000)
+        best_tours, best_scores, history = simulated_annealing(env, max_iter=1200)
         duration = time.time() - start
+
         times.append(duration)
         scores.append(best_scores[0])
 
-        print(f"Run {run + 1}: Time = {duration:.4f}s, Best Score = {best_scores[0]:.2f}")
-        visualize_tour(env, best_tours[0], graph_index=0)
+        print(f"Time = {duration:.4f}s, Best Score = {best_scores[0]:.2f}")
 
+        # Extract graph and positions
+        vrp_graph = env.sampler.graphs[0]
+        G = getattr(vrp_graph, 'graph', None)
+        pos = nx.get_node_attributes(G, 'coordinates')
+
+        # Add history frames
+        for i, (tour, score) in enumerate(history):
+            if run==0: all_frames.append((G, pos, tour, -score, f"Cost: {-score:.2f}"))
+
+        # Pause at final best tour
+        final_tour, final_score = history[-1]
+        for _ in range(5):  # Pause for ~1 sec
+            if run==0: all_frames.append((G, pos, final_tour, -final_score, f"FINAL | Cost: {-final_score:.2f}"))
+        if run==0: create_combined_animation(all_frames, filename="simulated_annealing_all_runs.gif")
+        
+        
+    # Create animation
+    # create_combined_animation(all_frames, filename="simulated_annealing_all_runs.gif")
+
+    # Plot execution time per run
     avg_time = np.mean(times)
     print(f"\nAverage time over {num_runs} runs: {avg_time:.4f} seconds")
 
-    # Plotting time per run
     plt.figure(figsize=(8, 5))
     plt.plot(range(1, num_runs + 1), times, marker='o', linestyle='-')
     plt.title("Time Taken to Reach Optimum (Simulated Annealing)")
@@ -104,6 +141,8 @@ def main():
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+
 
 if __name__ == "__main__":
     main()
