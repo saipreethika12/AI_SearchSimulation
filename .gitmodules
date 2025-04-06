@@ -1,0 +1,6 @@
+[submodule "Assgn_2/tsp_env"]
+	path = Assgn_2/tsp_env
+	url = https://github.com/kevin-schumann/VRP-GYM.git
+[submodule "Assgn_2/tsp_envir"]
+	path = Assgn_2/tsp_envir
+	url = https://github.com/kevin-schumann/VRP-GYM.git
