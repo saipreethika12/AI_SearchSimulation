@@ -12,26 +12,12 @@ def get_transitions(env):
     return transitions
 
 
-def manhattan_heuristic(state, goal_state, width):
-    x1, y1 = divmod(state, width)
-    x2, y2 = divmod(goal_state, width)
-    return abs(x1 - x2) + abs(y1 - y2)
-
-
-def find_goal_state(desc):
-    for idx, val in enumerate(desc.reshape(-1)):
-        if val == b'G':
-            return idx
-    return None
-
-
 def depth_first_bnb(env, max_time=600, start_time=None):
     transitions = get_transitions(env)
     start_state, _ = env.reset()
-    goal_state = find_goal_state(env.unwrapped.desc)
-    width = env.unwrapped.ncol
-
     stack = [(start_state, [start_state], 0)]
+    visited = set()
+
     best_cost = float('inf')
     best_path = []
 
@@ -41,7 +27,7 @@ def depth_first_bnb(env, max_time=600, start_time=None):
         if cost >= best_cost:
             continue
 
-        if state == goal_state:
+        if env.unwrapped.desc.reshape(-1)[state] == b'G':
             if cost < best_cost:
                 best_cost = cost
                 best_path = path[:]
@@ -49,10 +35,8 @@ def depth_first_bnb(env, max_time=600, start_time=None):
 
         for action in range(env.action_space.n):
             for prob, next_state, reward, done in transitions[state][action]:
-                if prob > 0 and next_state not in path:
-                    heuristic = manhattan_heuristic(next_state, goal_state, width)
-                    if cost + 1 + heuristic < best_cost:
-                        stack.append((next_state, path + [next_state], cost + 1))
+                if prob > 0 and next_state not in path and (cost + 1 <= best_cost):  # avoid cycles
+                    stack.append((next_state, path + [next_state], cost + 1))
 
     return best_path, best_cost if best_path else None
 
@@ -108,7 +92,7 @@ def plot_results(times):
     plt.figure(figsize=(8, 4))
     plt.plot(range(1, len(times) + 1), times, marker='o', linestyle='--', color='blue')
     plt.axhline(y=avg_time, color='red', linestyle='-', label=f"Average: {avg_time:.3f}s")
-    plt.title("Time Taken to Reach Goal in Each Run (DFBnB with Manhattan Heuristic)")
+    plt.title("Time Taken to Reach Goal in Each Run (DFBnB)")
     plt.xlabel("Run Number")
     plt.ylabel("Time (seconds)")
     plt.legend()

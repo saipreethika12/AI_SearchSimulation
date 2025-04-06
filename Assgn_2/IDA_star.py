@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 
 
 def heuristic(node, goal):
-    size = 4
+    size = 4  # 4x4 FrozenLake
     return abs(goal % size - node % size) + abs(goal // size - node // size)
 
 
@@ -61,13 +61,13 @@ def ida_star(env, start, goal, time_limit=600):
 
     while True:
         if time.time() - start_time > time_limit:
-            return "NOT_FOUND (TIMEOUT)", [], (time.time() - start_time) 
+            return "NOT_FOUND (TIMEOUT)", [], time.time() - start_time
 
         t = search(path, 0, bound, env, visited, goal, action_path)
         if t == "FOUND":
-            return path, action_path, (time.time() - start_time)
+            return path, action_path, time.time() - start_time
         if t == float('inf'):
-            return "NOT_FOUND", [], (time.time() - start_time)
+            return "NOT_FOUND", [], time.time() - start_time
         bound = t
 
 
@@ -81,9 +81,10 @@ times = []
 for i in range(5):
     obs, _ = env.reset()
     print(f"\nRun {i+1}:")
+
     path, actions, duration = ida_star(env, obs, goal_state)
 
-    print(f"Time taken: {duration:.2f} ms")
+    print(f"Time taken: {duration:.2f} seconds")
     times.append(duration)
 
     if path == "NOT_FOUND" or path == "NOT_FOUND (TIMEOUT)":
@@ -92,6 +93,7 @@ for i in range(5):
 
     print(f"Path: {path}")
 
+    # Replay
     obs, _ = env.reset()
     env.render()
     time.sleep(1)
@@ -108,16 +110,4 @@ env.close()
 # Show average time
 if times:
     avg = sum(times) / len(times)
-    print(f"\nAverage time to find path: {avg:.2f} ms")
-
-    # Plotting
-    plt.figure(figsize=(8, 4))
-    plt.plot(range(1, len(times)+1), times, marker='o', linestyle='--', color='blue')
-    plt.axhline(y=avg, color='red', linestyle='-', label=f"Average: {avg:.2f} ms")
-    plt.title("IDA* Time to Reach Goal (FrozenLake)")
-    plt.xlabel("Run Number")
-    plt.ylabel("Time (ms)")
-    plt.legend()
-    plt.grid(True)
-    plt.tight_layout()
-    plt.show()
+    print(f"\nAverage time to find path: {avg:.2f} seconds")
