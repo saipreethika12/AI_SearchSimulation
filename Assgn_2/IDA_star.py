@@ -1,6 +1,6 @@
 import time
 import gymnasium as gym
-import numpy as np
+import matplotlib.pyplot as plt
 
 
 def heuristic(node, goal):
@@ -26,7 +26,7 @@ def cost(node, succ):
     return 1
 
 
-def search(path, g, bound, env, visited, goal, action_path):
+def search(path, g, bound, env, visited, goal, action_path, explored):
     node = path[-1]
     f = g + heuristic(node, goal)
     if f > bound:
@@ -40,7 +40,8 @@ def search(path, g, bound, env, visited, goal, action_path):
             path.append(succ)
             visited.add(succ)
             action_path.append(action)
-            t = search(path, g + cost(node, succ), bound, env, visited, goal, action_path)
+            explored.append(succ)
+            t = search(path, g + cost(node, succ), bound, env, visited, goal, action_path, explored)
             if t == "FOUND":
                 return "FOUND"
             if t < min_bound:
@@ -56,57 +57,83 @@ def ida_star(env, start, goal, time_limit=600):
     path = [start]
     visited = {start}
     action_path = []
+    explored = [start]
     start_time = time.time()
 
     while True:
         if time.time() - start_time > time_limit:
-            return "NOT_FOUND (TIMEOUT)", [], time.time() - start_time
+            return "NOT_FOUND (TIMEOUT)", [], [], time.time() - start_time
 
-        t = search(path, 0, bound, env, visited, goal, action_path)
+        t = search(path, 0, bound, env, visited, goal, action_path, explored)
         if t == "FOUND":
-            return path, action_path, time.time() - start_time
+            return path[:], action_path[:], explored, time.time() - start_time
         if t == float('inf'):
-            return "NOT_FOUND", [], time.time() - start_time
+            return "NOT_FOUND", [], explored, time.time() - start_time
         bound = t
 
 
-# Initialize environment
-env = gym.make("FrozenLake-v1", desc=None, map_name="4x4",
-               is_slippery=False, render_mode="human")
+def visualize_frozen_lake(env, path, explored_path=None):
+    env.reset()
 
-goal_state = 15
-times = []
+    if explored_path:
+        print("Showing all explored states before optimal path:")
+        for state in explored_path:
+            env.unwrapped.s = state
+            env.render()
+            time.sleep(0.1)
+        time.sleep(1)
 
-for i in range(5):
-    obs, _ = env.reset()
-    print(f"\nRun {i+1}:")
+    if not path or not isinstance(path, list):
+        print("No valid path found.")
+        return
 
-    path, actions, duration = ida_star(env, obs, goal_state)
-
-    print(f"Time taken: {duration:.2f} seconds")
-    times.append(duration)
-
-    if path == "NOT_FOUND" or path == "NOT_FOUND (TIMEOUT)":
-        print("No solution found.")
-        continue
-
-    print(f"Path: {path}")
-
-    # Replay
-    obs, _ = env.reset()
-    env.render()
-    time.sleep(1)
-
-    for action in actions:
-        obs, _, done, _, _ = env.step(action)
+    print("Showing optimal path:")
+    for state in path:
+        env.unwrapped.s = state
         env.render()
         time.sleep(0.5)
-        if done:
-            break
 
-env.close()
+    time.sleep(2)
+    env.close()
 
-# Show average time
-if times:
-    avg = sum(times) / len(times)
-    print(f"\nAverage time to find path: {avg:.2f} seconds")
+
+def run_ida_star(runs=5, timeout=600):
+    goal_state = 15
+    times = []
+
+    for i in range(runs):
+        env = gym.make("FrozenLake-v1", map_name="4x4", is_slippery=False, render_mode="human")
+        obs, _ = env.reset()
+        print(f"\nRun {i + 1}:")
+        path, actions, explored, duration = ida_star(env, obs, goal_state, time_limit=timeout)
+
+        print(f"Time taken: {duration:.2f} seconds")
+        times.append(duration)
+
+        if path == "NOT_FOUND" or path == "NOT_FOUND (TIMEOUT)":
+            print("No solution found.")
+        else:
+            print(f"Path: {path}")
+            visualize_frozen_lake(env, path, explored)
+
+        env.close()
+
+
+    if times:
+        avg = sum(times) / len(times)
+        print(f"\nAverage time to find path: {avg:.2f} seconds")
+
+        plt.figure(figsize=(8, 4))
+        plt.plot(range(1, len(times) + 1), times, marker='o', linestyle='--', color='green')
+        plt.axhline(y=avg, color='red', linestyle='-', label=f"Average: {avg:.2f}s")
+        plt.title("Time Taken in Each Run (IDA*)")
+        plt.xlabel("Run Number")
+        plt.ylabel("Time (seconds)")
+        plt.legend()
+        plt.grid(True)
+        plt.tight_layout()
+        plt.show()
+
+
+if __name__ == "__main__":
+    run_ida_star(runs=5, timeout=600)
